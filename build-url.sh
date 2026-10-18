@@ -5,9 +5,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
 # .env laden
-if [[ -f "$SCRIPT_DIR/.env" ]]; then
+if [[ -f ".env" ]]; then
   set -a
-  source "$SCRIPT_DIR/.env"
+  source ".env"
   set +a
 else
   echo "Fehler: .env nicht gefunden"

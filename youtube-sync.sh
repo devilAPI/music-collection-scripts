@@ -15,6 +15,7 @@ yt-dlp \
   --audio-quality 0 \
   --embed-metadata \
   --embed-thumbnail \
+  --write-thumbnail \
   --convert-thumbnails jpg \
   --download-archive youtube_playlist.archive \
   --ignore-errors \

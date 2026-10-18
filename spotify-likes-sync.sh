@@ -64,14 +64,15 @@ fi
 
 # 4) Alle Liked Songs (URIs) holen
 LIKED_URIS=()
+declare -A LIKED_NAMES=()
 NEXT="https://api.spotify.com/v1/me/tracks?limit=50"
 while [[ -n "$NEXT" && "$NEXT" != "null" ]]; do
   PAGE="$(api "$NEXT")"
-  mapfile -t URIS < <(jq -r '.items[].track.uri' <<<"$PAGE")
-  for u in "${URIS[@]}"; do
+  while IFS=$'\t' read -r u name; do
     [[ "$u" == "null" || -z "$u" ]] && continue
     LIKED_URIS+=("$u")
-  done
+    LIKED_NAMES["$u"]="$name"
+  done < <(jq -r '.items[].track | [.uri, ((.artists | map(.name) | join(", ")) + " - " + .name)] | @tsv' <<<"$PAGE")
   NEXT="$(jq -r '.next' <<<"$PAGE")"
 done
 
@@ -110,6 +111,43 @@ while [[ $i -lt $TOTAL ]]; do
 done
 
 echo "Fertig. Playlist: https://open.spotify.com/playlist/$PLAYLIST_ID"
+# 6) Download als Opus (YouTube via Sunnify)
+#    Jeder Track einzeln, damit grosse Playlists kein Problem sind.
+#    Erledigte Track-IDs stehen im Archiv und werden beim naechsten Lauf uebersprungen.
+#    Was nicht geladen werden konnte, steht danach in failed.log (wird pro Lauf neu geschrieben).
 echo "Starte Download..."
-mkdir -p "$OUTPUT_FOLDER/Spotify"
-spotiflac-cli d https://open.spotify.com/playlist/$PLAYLIST_ID -o $OUTPUT_FOLDER/Spotify
+OPUS_DIR="$OUTPUT_FOLDER/Spotify/opus"
+ARCHIVE="$OPUS_DIR/spotify_likes.archive"
+FAILED_LOG="$OPUS_DIR/failed.log"
+mkdir -p "$OPUS_DIR"
+touch "$ARCHIVE"
+: > "$FAILED_LOG"
+
+trap 'echo "Abgebrochen."; exit 130' INT
+
+FAILED=0
+n=0
+for u in "${LIKED_URIS[@]}"; do
+  n=$((n+1))
+  # lokale Dateien (spotify:local:...) haben keine Track-Seite
+  [[ "$u" == spotify:track:* ]] || continue
+  id="${u##*:}"
+  grep -qxF "$id" "$ARCHIVE" && continue
+
+  name="${LIKED_NAMES[$u]:-$id}"
+  url="https://open.spotify.com/track/$id"
+  echo "[$n/$TOTAL] $name"
+  if out="$("$SCRIPT_DIR/sunnify-opus.py" download "$url" -o "$OPUS_DIR" -f opus -q 320 2>&1)"; then
+    echo "$id" >> "$ARCHIVE"
+  else
+    FAILED=$((FAILED+1))
+    # Grund: Sunnifys Fehlerzeile, sonst die letzte Ausgabezeile vor der Zusammenfassung
+    reason="$(grep -m1 -e '^error:' -e '✗' <<<"$out" || grep -v -e '^»' -e '^done:' -e '^ *hint:' <<<"$out" | tail -n1 || true)"
+    echo "  ✗ $reason"
+    printf '%s\t%s\t%s\t%s\n' "$(date '+%F %T')" "$name" "$url" "$reason" >> "$FAILED_LOG"
+  fi
+done
+
+echo "Download fertig. Fehlgeschlagen: $FAILED"
+[[ "$FAILED" -gt 0 ]] && echo "Details: $FAILED_LOG"
+exit 0

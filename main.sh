@@ -4,6 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 set -a; source "$SCRIPT_DIR/.env"; set +a
 
+# Download
 : "${OUTPUT_FOLDER:?Set OUTPUT_FOLDER in .env}"
 : "${ENABLE_YOUTUBE_SYNC:?Set ENABLE_YOUTUBE_SYNC in .env}"
 : "${ENABLE_SOUNDCLOUD_SYNC:?Set ENABLE_SOUNDCLOUD_SYNC in .env}"
@@ -13,6 +14,10 @@ set -a; source "$SCRIPT_DIR/.env"; set +a
 [[ "${ENABLE_SOUNDCLOUD_SYNC:-false}" == "true" ]] && echo "Starting SoundCloud Sync..." && "$SCRIPT_DIR/soundcloud-likes-sync.sh"
 [[ "${ENABLE_YOUTUBE_SYNC:-false}" == "true" ]] && echo "Starting YouTube Sync..." && "$SCRIPT_DIR/youtube-sync.sh"
 
+# File Edits
+[[ "${ENABLE_COVER_FIX:-false}" == "true" ]] && echo "Starting Cover Fix..." && python3 "$SCRIPT_DIR/fix_covers.py" "$OUTPUT_FOLDER"
+
+# Destination
 [[ "${ENABLE_IPOD_SYNC:-false}" == "true" ]] && echo "Starting iPod Sync..." && rsync -a --ignore-existing --info=stats2,progress2 "$OUTPUT_FOLDER"/ "$IPOD_OUT"/
 
 # ---- Remote Sync (SFTP via lftp mirror) ----
